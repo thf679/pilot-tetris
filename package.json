@@ -1,0 +1,16 @@
+{
+  "name": "pilot-tetris",
+  "version": "0.1.0",
+  "description": "Pilot Tetris — a composite toolkit project consuming tool-project-qa and tool-telegram-comms.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "npx serve . -l 3000",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["tetris", "game", "typescript", "toolkit"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}
