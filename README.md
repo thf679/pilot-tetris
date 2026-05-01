@@ -83,17 +83,23 @@ pilot-tetris/
 ├── tsconfig.json
 ├── index.html            # Chrome entry point
 ├── style.css             # Game UI styling
+├── server.mjs            # Node dev server + /api/notify Telegram proxy
 ├── tools.lock            # Pinned toolkit-framework tool versions
 ├── .gitignore
 ├── src/
-│   ├── main.ts           # Entry point: wires input, loop, renderer
+│   ├── main.ts           # Entry point: wires input, loop, renderer, notify
 │   ├── game.ts           # Game engine: state, loop, scoring, lock delay
 │   ├── board.ts          # Board grid, collision, line clearing
 │   ├── tetromino.ts      # Piece definitions, spawn, rotation, wall kicks
 │   ├── renderer.ts       # Canvas drawing & HUD updates
 │   ├── input.ts          # Keyboard mapping
+│   ├── notify.ts         # Browser-side game-over notification helper
 │   ├── types.ts          # Shared TypeScript types
 │   └── constants.ts      # Grid size, colors, scoring tables
+├── scripts/
+│   ├── notify.sh         # Send a Telegram message via the gitignored config
+│   ├── qa.sh             # Wrapper around qa.py
+│   └── qa.py             # Run tool-project-qa from this project directory
 ├── config/               # Per-tool configuration for the framework
 │   ├── project-qa.yaml
 │   ├── telegram-comms.yaml         # gitignored (local secrets)
@@ -107,11 +113,14 @@ pilot-tetris/
 
 ## Scripts
 
-| Script           | Description                                    |
-|------------------|------------------------------------------------|
-| `npm run build`  | Compile TypeScript to `dist/`                  |
-| `npm run dev`    | Start a static file server on port 3000        |
-| `npm run clean`  | Remove the compiled `dist/` directory          |
+| Script                | Description                                                             |
+|-----------------------|-------------------------------------------------------------------------|
+| `npm run build`       | Compile TypeScript to `dist/`                                           |
+| `npm run dev`         | Start the Node dev server (serves files **and** proxies Telegram)       |
+| `npm run dev:static`  | Static-only fallback — `npx serve` on port 3000, no notifications        |
+| `npm run notify -- "msg"` | Send a Telegram message via the gitignored config                   |
+| `npm run qa -- --question "..."` | Ask the project-qa tool a question                           |
+| `npm run clean`       | Remove the compiled `dist/` directory                                   |
 
 ---
 
@@ -157,30 +166,54 @@ cp config/telegram-comms.yaml.example config/telegram-comms.yaml
 #   chat_id:   "<your chat id>"
 ```
 
-### Wiring (contract resolution)
+### Wiring (game → Telegram)
 
-1. `tool-project-qa` declares an optional dependency on the `telegram-send`
-   contract.
-2. `tool-telegram-comms` declares that it provides `telegram-send`.
-3. At framework bootstrap time the contract is resolved and a notifier handle
-   is injected into the QA tool.
-4. Each answered question fires a Telegram message with a question summary
-   and answer preview.
+The browser game and the Telegram bot are bridged by a tiny Node dev server
+(`server.mjs`):
+
+1. The game state transitions to `gameOver` when a new piece can't spawn.
+2. `src/main.ts` calls `notifyGameOver(...)` once per game-over event.
+3. `src/notify.ts` POSTs `{ score, lines, level }` to `/api/notify` on the
+   local dev server.
+4. `server.mjs` reads the gitignored `config/telegram-comms.yaml`, formats
+   the message, and forwards it to the Telegram Bot API.
+
+The bot token never reaches the browser — only the dev server (which has read
+access to the YAML) can talk to Telegram. See `DECISIONS.md` § 2.6 for the
+trade-off discussion.
+
+The `tool-project-qa` ⇄ `tool-telegram-comms` contract wiring described in
+the framework docs is the same idea applied to the Python tools: each
+answered question optionally fires a notification.
 
 ### Example usage
+
+#### Browser
+
+`npm run dev`, open <http://localhost:3000>, play, then deliberately top out
+the board. A Telegram message like:
+
+```
+🎮 pilot-tetris — game over
+Final score: 1230
+Lines cleared: 4
+Level reached: 1
+```
+
+lands in the configured chat within a second of game over.
 
 #### Standalone CLI
 
 ```bash
-# Send a Telegram notification
-python -m tool_telegram_comms.src.cli \
-  --config config/telegram-comms.yaml \
-  --text "Game deployment started"
+# Send any Telegram message via the gitignored config
+npm run notify -- "Game deployment started"
+# or directly
+scripts/notify.sh "Build finished"
 
 # Ask a question about the codebase
-python -m tool_project_qa.src.cli \
-  --config config/project-qa.yaml \
-  --question "How does scoring work?"
+npm run qa -- --question "How does scoring work?"
+# or directly
+scripts/qa.sh --question "What are the controls?"
 ```
 
 #### Programmatic (inside the framework)

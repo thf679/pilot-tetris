@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "dev": "npx serve . -l 3000",
+    "dev": "node server.mjs",
+    "dev:static": "npx serve . -l 3000",
+    "notify": "bash scripts/notify.sh",
+    "qa": "bash scripts/qa.sh",
     "clean": "rm -rf dist"
   },
   "keywords": ["tetris", "game", "typescript", "toolkit"],

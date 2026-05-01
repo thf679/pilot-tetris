@@ -176,6 +176,65 @@ toolkit tools only run when explicitly invoked via Python.
 - Tool integration is opt-in for contributors who also want Q&A or
   notification flows.
 
+### 2.6 Game-over Telegram notification via a tiny Node proxy
+
+**Decision:** When the game state transitions to `gameOver`, the browser POSTs
+`{ score, lines, level }` to `/api/notify` on the local dev server
+(`server.mjs`). The Node server reads the gitignored
+`config/telegram-comms.yaml`, formats the message, and forwards it to the
+Telegram Bot API. The bot token never reaches the browser.
+
+**Rationale:**
+- A direct `fetch` from the browser to `api.telegram.org` would require either
+  embedding the bot token in the page (it would then be visible in DevTools or
+  any saved page) or fetching the gitignored YAML over HTTP — both leak the
+  token to anyone who can reach the dev server.
+- A small Node server keeps the secret on the same trust boundary as the file
+  itself: only processes that can read the file can use the credentials.
+- Pure Node + built-ins (`http`, `https`, `fs`) means no new dependencies — the
+  dev tree stays at one dev-dep (TypeScript).
+- The endpoint is deliberately narrow: the client only sends the three score
+  fields; the server controls the message format. There is no way for the
+  browser to inject arbitrary Telegram payloads.
+
+**Implementation notes:**
+- `src/notify.ts` is a tiny browser-side helper; it fire-and-forgets the
+  request so a missing or unreachable server never crashes the game loop.
+- `src/main.ts` tracks a `notifiedThisRound` flag so the message fires exactly
+  once per game and re-arms when the player presses **R** to restart.
+- `server.mjs` explicitly returns 403 for `config/telegram-comms.yaml` so the
+  secrets file cannot be retrieved over HTTP even though it lives under the
+  served root.
+- `scripts/notify.sh` wraps the same Telegram call as a CLI for ad-hoc
+  notifications (deploy hooks, manual pings) so the integration is reusable
+  outside the game.
+
+**Trade-off:** `npm run dev` now runs Node instead of `npx serve`. The old
+behaviour is preserved as `npm run dev:static` for contributors who don't want
+to set up Telegram credentials.
+
+### 2.7 Wrapper script for the Q&A tool (`scripts/qa.py`)
+
+**Decision:** A pilot-local Python wrapper invokes `tool-project-qa` directly
+via its `ProjectQATool` class, rather than relying on the upstream tool's
+bundled CLI.
+
+**Rationale:**
+- The upstream `cli.py` instantiates a `_DummyContext` whose `get_contract`
+  raises a bare `Exception("not found")`, but the tool only catches the
+  specific `ToolNotFoundError`. The CLI therefore crashes on first use whenever
+  optional contracts (`telegram-send`, `logger`) aren't wired in.
+- The wrapper passes the proper `ToolContext` from the tool's own module, so
+  optional contracts are gracefully absent and the tool runs cleanly.
+- It also resolves `project_root: .` against the project directory rather than
+  the caller's cwd, so `npm run qa -- --question "..."` and
+  `scripts/qa.sh --question "..."` produce the same answer regardless of where
+  they're invoked from.
+
+**Trade-off:** A small amount of duplicated CLI surface in the consumer.
+Acceptable for a pilot; once the upstream CLI is fixed, the wrapper can shrink
+to a thin path-resolver or be deleted entirely.
+
 ---
 
 ## 3. Tooling choices outside the framework
