@@ -1,0 +1,10 @@
+schema_version: 1
+registry:
+  - name: project-qa
+    source: github.com/thf679/tool-project-qa
+    version: v0.1.0
+    path: tools/project-qa
+  - name: telegram-comms
+    source: github.com/thf679/tool-telegram-comms
+    version: v0.1.0
+    path: tools/telegram-comms

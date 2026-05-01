@@ -1,0 +1,4 @@
+# Copy this file to telegram-comms.yaml and fill in your own credentials.
+# The real telegram-comms.yaml is gitignored so secrets stay local.
+bot_token: "REPLACE_WITH_YOUR_BOT_TOKEN"
+chat_id: "REPLACE_WITH_YOUR_CHAT_ID"

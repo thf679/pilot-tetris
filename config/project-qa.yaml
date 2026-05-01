@@ -1,0 +1,4 @@
+index_paths:
+  - src
+  - README.md
+project_root: .
